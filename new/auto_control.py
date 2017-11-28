@@ -3,10 +3,19 @@
 import RPi.GPIO as GPIO
 import time
 import curses
+import csv
+# import logging
 
 # Ensure safe exit
 import atexit
 atexit.register(GPIO.cleanup)
+
+# # Setup logging
+# logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+#                     filename='auto_control.log',
+#                     level=logging.INFO,
+#                     datefmt='%m/%d/%Y %I:%M:%S %p')
+
 
 # Steering servo GPIO Setup
 steering_pin = 11
@@ -45,9 +54,9 @@ class u_sensor(object):
 
         result = float('%.2f' % (t3))
 
-        if result > 20:
-            result = 0.3
-            # result = self.get_distance()
+        # if result > 20:
+        #     result = 0.3
+        #     result = self.get_distance()
 
         return result
 
@@ -96,6 +105,9 @@ def write(screen, string, row, align='center', bar=False):
                 screen.addstr(row, column + i, char, curses.color_pair(1))
 
     screen.refresh()
+
+
+def log(a, b, c, d):
 
 
 def sync_esc():
@@ -187,19 +199,6 @@ def main(screen):
 
     while True:
 
-        loopNum += 1
-        if loopNum == 20:
-            loopNum = 0
-            write(screen, " DEBUG ", 17, bar=True)
-            screen.timeout(-1)
-
-        elif loopNum == 0:
-            write(screen, "       ", 17)
-            screen.timeout(200)
-
-
-        # prev_t_index = throttle_index
-
         # Pause
         if char == ord('p'):
             if paused:
@@ -220,46 +219,30 @@ def main(screen):
             steering_index = 2
             throttle_index = 3
 
-            for sensor in ultrasonic_list[:1]:
+            # Get reading from sensor
+            front_dist = ultrasonic_list[0].get_distance()
+            left_dist = ultrasonic_list[1].get_distance()
+            right_dist = ultrasonic_list[2].get_distance()
 
-                # Get reading from sensor
-                dist = sensor.get_distance()
+            smallest_dist = min(front_dist, left_dist, right_dist)
 
-                smallest_dist = 100
-                for u in ultrasonic_list:
-                    d = u.get_distance()
-                    if smallest_dist > d:
-                        smallest_dist = d
+            # Check for further distance
+            if smallest_dist <= avoid_distances[1]:
 
-                # Check for further distance
-                if smallest_dist <= avoid_distances[1]:
+                if left_dist > right_dist:
+                    steering_index = 0
+                else:
+                    steering_index = 4
+                throttle_index = 3
 
-                    # If only one sensor, turn right
-                    if len(ultrasonic_list) == 1:
-                        steering_index = 3
-                    elif len(ultrasonic_list) >= 3:
-                        left_dist = ultrasonic_list[1].get_distance()
-                        right_dist = ultrasonic_list[2].get_distance()
-                        if left_dist > right_dist:
-                            steering_index = 0
-                        else:
-                            steering_index = 4
-                    throttle_index = 3
+            # Check for closer distance
+            if smallest_dist <= avoid_distances[0]:
 
-                # Check for closer distance
-                if smallest_dist <= avoid_distances[0]:
-
-                    # If only one sensor, turn right
-                    if len(ultrasonic_list) == 1:
-                        steering_index = 4
-                    elif len(ultrasonic_list) >= 3:
-                        left_dist = ultrasonic_list[1].get_distance()
-                        right_dist = ultrasonic_list[2].get_distance()
-                        if left_dist > right_dist:
-                            steering_index = 0
-                        else:
-                            steering_index = 4
-                    throttle_index = 2
+                if left_dist > right_dist:
+                    steering_index = 0
+                else:
+                    steering_index = 4
+                throttle_index = 2
 
             # Safety
             for sensor in ultrasonic_list:
@@ -267,7 +250,6 @@ def main(screen):
                 if a <= .2 and a != 0.06:
                     throttle_index = 0
 
-        # throttle_index = 1
         servoSet()
 
         temp_s_bar = steering_bar
