@@ -125,8 +125,6 @@ def sync_esc():
     time.sleep(0.8)
     print("\n" * 2)
 
-# def reverse():
-
 
 def servoSet():
     global prev_t_index, prev_s_index, throttle_index, steering_index
