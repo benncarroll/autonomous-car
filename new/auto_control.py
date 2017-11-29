@@ -3,14 +3,37 @@
 import RPi.GPIO as GPIO
 import time
 import curses
+
 import csv
+import os
+
 # import logging
 
 # Ensure safe exit
 import atexit
 atexit.register(GPIO.cleanup)
 
-# # Setup logging
+# Setup logging
+timestr = time.strftime("%Y%m%d-%H%M%S")
+log_path = "/home/pi/car/logs/auto - {}.csv".format(timestr)
+
+if not os.path.isfile(log_path):
+    csv_launcher = open(log_path, 'w').close()
+
+csvfile = open(log_path, 'w', newline='')
+logger = csv.writer(csvfile, delimiter=',',
+                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
+
+# Header
+logger.writerow(["Date/Time",
+                 "Front Sensor Dist",
+                 "Left Sensor Dist",
+                 "Right Sensor Dist",
+                 "Steering Index",
+                 "Throttle Index"
+                 ])
+
+
 # logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
 #                     filename='auto_control.log',
 #                     level=logging.INFO,
@@ -61,6 +84,18 @@ class u_sensor(object):
         return result
 
 
+class log_data_class():
+    def __init__(self):
+        self.dt = time.strftime("%Y%m%d-%H%M%S")
+        self.fs = None
+        self.ls = None
+        self.rs = None
+        self.si = None
+        self.ti = None
+
+
+log_data = log_data_class()
+
 # Vars
 steering_bar = ['←', '\\', '|', '/', '→']
 steering_list = [9.0, 8.0, 7.5, 7.0, 6.0]
@@ -105,9 +140,6 @@ def write(screen, string, row, align='center', bar=False):
                 screen.addstr(row, column + i, char, curses.color_pair(1))
 
     screen.refresh()
-
-
-def log(a, b, c, d):
 
 
 def sync_esc():
@@ -163,6 +195,10 @@ def servoSet():
             throttle_servo.ChangeDutyCycle(throttle_list[0])
         prev_t_index = throttle_index
 
+    log_data.dt = time.strftime("%Y%m%d-%H%M%S")
+    log_data.si = steering_index
+    log_data.ti = throttle_index
+
 
 def end(screen):
     # Stop PWM's
@@ -174,6 +210,9 @@ def end(screen):
     write(screen, "After doing so, press any key to end.", 6)
     screen.timeout(-1)
     screen.getch()
+
+    # Close log file
+    csvfile.close()
 
 
 def main(screen):
@@ -251,6 +290,14 @@ def main(screen):
                     throttle_index = 0
 
         servoSet()
+
+        log_data.fs = front_dist
+        log_data.ls = left_dist
+        log_data.rs = right_dist
+
+        logger.writerow([
+            log_data.dt, log_data.fs, log_data.ls, log_data.rs, log_data.si, log_data.ti
+        ])
 
         temp_s_bar = steering_bar
         s_overlay_char = temp_s_bar[steering_index]
