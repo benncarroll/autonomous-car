@@ -13,6 +13,13 @@ import os
 import atexit
 atexit.register(GPIO.cleanup)
 
+# Pin variables (physical location)
+sync_button_pin = 32
+throttle_pin = 13
+steering_pin = 11
+ultrasonic_list = [u_sensor(29, 31), u_sensor(35, 37), u_sensor(38, 40)] # front, left, right
+
+
 # Setup logging
 timestr = time.strftime("%Y%m%d-%H%M%S")
 log_path = "/home/pi/car/logs/auto - {}.csv".format(timestr)
@@ -34,24 +41,23 @@ logger.writerow(["Date/Time",
                  ])
 
 
-# logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
-#                     filename='auto_control.log',
-#                     level=logging.INFO,
-#                     datefmt='%m/%d/%Y %I:%M:%S %p')
+# GPIO init
+GPIO.setmode(GPIO.BOARD)
 
+# Sync button setup
+GPIO.setup(sync_button_pin, GPIO.IN)
 
 # Steering servo GPIO Setup
-steering_pin = 11
-GPIO.setmode(GPIO.BOARD)
 GPIO.setup(steering_pin, GPIO.OUT, initial=False)
 steering_servo = GPIO.PWM(steering_pin, 50)
 steering_servo.start(0)
 
 # Throttle GPIO Setup
-throttle_pin = 13
 GPIO.setup(throttle_pin, GPIO.OUT, initial=False)
 throttle_servo = GPIO.PWM(throttle_pin, 50)
 
+#                 close, far
+avoid_distances = [0.6, 1.5]
 
 class u_sensor(object):
     """docstring for u_sensor."""
@@ -108,10 +114,6 @@ throttle_list = [6.5, 7.5, 8, 8, 8.1]
 throttle_index = 1
 prev_t_index = 1
 
-#                 front, left, right, back
-ultrasonic_list = [u_sensor(29, 31), u_sensor(35, 37), u_sensor(38, 40)]
-#                 close, far
-avoid_distances = [0.6, 1.5]
 
 
 def write(screen, string, row, align='center', bar=False):
@@ -145,14 +147,18 @@ def write(screen, string, row, align='center', bar=False):
 def sync_esc():
 
     print("\n" * 2)
-    if input("Please turn the car off and then on again.\nAfter it's first beep, press enter. ") != "skip":
-        print("Syncing...")
-        throttle_servo.start(7.5)
-        time.sleep(0.5)
-        throttle_servo.ChangeDutyCycle(10)
-        time.sleep(2)
-        throttle_servo.ChangeDutyCycle(7.5)
-        time.sleep(1)
+    print("Please turn the car off and then on again.\nAfter it's first beep, press the button.")
+
+    # Wait for button press
+    while GPIO.input(on_button) == GPIO.LOW:
+        time.sleep(0.1)
+
+    print("Syncing...")
+    throttle_servo.start(7.5)
+    time.sleep(0.25)
+    throttle_servo.ChangeDutyCycle(10)
+    time.sleep(2)
+    throttle_servo.ChangeDutyCycle(7.5)
     print("Sync process completed. Loading dashboard...")
     time.sleep(0.8)
     print("\n" * 2)
@@ -165,7 +171,7 @@ def servoSet():
     # to be reset every cycle, possibly cutting pulses short.
 
     if prev_s_index != steering_index:
-        if throttle_index == 0 or (throttle_index > 0 and prev_t_index == 0):
+        if (throttle_index == 0 and prev_t_index > 0):
 
             steering_index = {
                 0: 4,
@@ -173,7 +179,10 @@ def servoSet():
                 2: 2,
                 3: 1,
                 4: 0
-            }.get(steering_index)
+            }[steering_index]
+
+        elif throttle_index > 0 and prev_t_index == 0:
+            steering_index = 2
 
         steering_servo.ChangeDutyCycle(steering_list[steering_index])
 
