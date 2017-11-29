@@ -67,7 +67,7 @@ steering_index = 2
 prev_s_index = 2
 
 throttle_bar = ['R', 'N', '1', '2', '3']
-throttle_list = [6.5, 7.5, 8.05, 8.1, 8.1]
+throttle_list = [6.5, 7.5, 8.1, 8.15, 8.1]
 # throttle_list = [6.2, 7.5, 8, 8.1, 8.2]
 throttle_index = 1
 prev_t_index = 1
@@ -252,14 +252,13 @@ def main(screen):
                 a = sensor.get_distance()
                 if a <= 0.3 and a != 0.06:
                     throttle_index = 0
-                    if prev_t_index > 0:
-                        steering_index = {
-                            0: 4,
-                            1: 3,
-                            2: 2,
-                            3: 1,
-                            4: 0
-                        }[steering_index]
+                    steering_index = {
+                        0: 4,
+                        1: 3,
+                        2: 2,
+                        3: 1,
+                        4: 0
+                    }[steering_index]
 
             # Straighten steering after finishing reversing
             if throttle_index > 0 and prev_t_index == 0:
