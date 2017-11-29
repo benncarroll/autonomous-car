@@ -3,11 +3,10 @@
 import RPi.GPIO as GPIO
 import time
 import curses
+import classes
 
 import csv
 import os
-
-# import logging
 
 # Ensure safe exit
 import atexit
@@ -17,7 +16,7 @@ atexit.register(GPIO.cleanup)
 sync_button_pin = 32
 throttle_pin = 13
 steering_pin = 11
-ultrasonic_list = [u_sensor(29, 31), u_sensor(35, 37), u_sensor(38, 40)] # front, left, right
+ultrasonic_list = [classes.u_sensor(29, 31), classes.u_sensor(35, 37), classes.u_sensor(38, 40)]  # front, left, right
 
 
 # Setup logging
@@ -57,50 +56,9 @@ GPIO.setup(throttle_pin, GPIO.OUT, initial=False)
 throttle_servo = GPIO.PWM(throttle_pin, 50)
 
 #                 close, far
-avoid_distances = [0.6, 1.5]
+avoid_distances = [0.8, 1.5]
 
-class u_sensor(object):
-    """docstring for u_sensor."""
-
-    def __init__(self, trigger_pin, echo_pin):
-        self.trigger_pin = trigger_pin
-        self.echo_pin = echo_pin
-        GPIO.setup(trigger_pin, GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(echo_pin, GPIO.IN)
-        time.sleep(0.5)
-
-    def get_distance(self):
-        GPIO.output(self.trigger_pin, GPIO.HIGH)
-        time.sleep(0.000015)
-        GPIO.output(self.trigger_pin, GPIO.LOW)
-        while not GPIO.input(self.echo_pin):
-            pass
-        t1 = time.time()
-        while GPIO.input(self.echo_pin):
-            pass
-        t2 = time.time()
-        t3 = (t2 - t1) * 340 / 2
-
-        result = float('%.2f' % (t3))
-
-        # if result > 20:
-        #     result = 0.3
-        #     result = self.get_distance()
-
-        return result
-
-
-class log_data_class():
-    def __init__(self):
-        self.dt = time.strftime("%Y%m%d-%H%M%S")
-        self.fs = None
-        self.ls = None
-        self.rs = None
-        self.si = None
-        self.ti = None
-
-
-log_data = log_data_class()
+log_data = classes.log_data_class()
 
 # Vars
 steering_bar = ['←', '\\', '|', '/', '→']
@@ -109,11 +67,10 @@ steering_index = 2
 prev_s_index = 2
 
 throttle_bar = ['R', 'N', '1', '2', '3']
-throttle_list = [6.5, 7.5, 8, 8, 8.1]
+throttle_list = [6.5, 7.5, 8.05, 8.1, 8.1]
 # throttle_list = [6.2, 7.5, 8, 8.1, 8.2]
 throttle_index = 1
 prev_t_index = 1
-
 
 
 def write(screen, string, row, align='center', bar=False):
@@ -123,6 +80,8 @@ def write(screen, string, row, align='center', bar=False):
 
     if row == "last":
         row = dims[0] - 1
+    elif row == "first":
+        row = 0
 
     if align == 'right':
         column = dims[1] - len(string) - 1
@@ -150,39 +109,32 @@ def sync_esc():
     print("Please turn the car off and then on again.\nAfter it's first beep, press the button.")
 
     # Wait for button press
-    while GPIO.input(on_button) == GPIO.LOW:
+    while GPIO.input(sync_button_pin) == GPIO.LOW:
         time.sleep(0.1)
 
     print("Syncing...")
+
     throttle_servo.start(7.5)
     time.sleep(0.25)
     throttle_servo.ChangeDutyCycle(10)
     time.sleep(2)
     throttle_servo.ChangeDutyCycle(7.5)
+    time.sleep(0.25)
+
     print("Sync process completed. Loading dashboard...")
     time.sleep(0.8)
     print("\n" * 2)
 
+# def reverse():
+
 
 def servoSet():
-    global prev_t_index, prev_s_index, steering_index
+    global prev_t_index, prev_s_index, throttle_index, steering_index
 
     # prev_?_index is used so that the pulse width does not have
     # to be reset every cycle, possibly cutting pulses short.
 
     if prev_s_index != steering_index:
-        if (throttle_index == 0 and prev_t_index > 0):
-
-            steering_index = {
-                0: 4,
-                1: 3,
-                2: 2,
-                3: 1,
-                4: 0
-            }[steering_index]
-
-        elif throttle_index > 0 and prev_t_index == 0:
-            steering_index = 2
 
         steering_servo.ChangeDutyCycle(steering_list[steering_index])
 
@@ -231,7 +183,7 @@ def main(screen):
     global throttle_bar, throttle_list, throttle_index
 
     curses.curs_set(0)
-    screen.timeout(200)
+    screen.timeout(100)
 
     write(screen, "▁▂▃▄▅▆▇█ Ben Carroll's Automagic Car █▇▆▅▄▃▂▁", 2)
     write(screen, "This script automatically controls the the car,", 4)
@@ -243,6 +195,7 @@ def main(screen):
 
     char = 0
     paused = False
+    pause_line_written = False
     loopNum = 0
 
     while True:
@@ -277,26 +230,40 @@ def main(screen):
             # Check for further distance
             if smallest_dist <= avoid_distances[1]:
 
-                if left_dist > right_dist:
-                    steering_index = 0
-                else:
-                    steering_index = 4
+                if not throttle_index == 0:
+                    if left_dist > right_dist:
+                        steering_index = 0
+                    else:
+                        steering_index = 4
                 throttle_index = 3
 
             # Check for closer distance
             if smallest_dist <= avoid_distances[0]:
 
-                if left_dist > right_dist:
-                    steering_index = 0
-                else:
-                    steering_index = 4
-                throttle_index = 2
+                if not throttle_index == 0:
+                    if left_dist > right_dist:
+                        steering_index = 0
+                    else:
+                        steering_index = 4
+                    throttle_index = 2
 
-            # Safety
+            # Reverse if closer than 30cm
             for sensor in ultrasonic_list:
                 a = sensor.get_distance()
-                if a <= .2 and a != 0.06:
+                if a <= 0.3 and a != 0.06:
                     throttle_index = 0
+                    if prev_t_index > 0:
+                        steering_index = {
+                            0: 4,
+                            1: 3,
+                            2: 2,
+                            3: 1,
+                            4: 0
+                        }[steering_index]
+
+            # Straighten steering after finishing reversing
+            if throttle_index > 0 and prev_t_index == 0:
+                steering_index = 2
 
         servoSet()
 
@@ -304,9 +271,15 @@ def main(screen):
         log_data.ls = left_dist
         log_data.rs = right_dist
 
-        logger.writerow([
-            log_data.dt, log_data.fs, log_data.ls, log_data.rs, log_data.si, log_data.ti
-        ])
+        if not paused:
+            logger.writerow([
+                log_data.dt, log_data.fs, log_data.ls, log_data.rs, log_data.si, log_data.ti
+            ])
+            pause_line_written = False
+        else:
+            if not pause_line_written:
+                logger.writerow(log_data.dt)
+                pause_line_written = True
 
         temp_s_bar = steering_bar
         s_overlay_char = temp_s_bar[steering_index]
@@ -315,10 +288,15 @@ def main(screen):
 
         write(screen, ' ' + ' '.join(temp_s_bar) + ' ', 8, bar=True)
         write(screen, ' ' + ' '.join(temp_t_bar) + ' ', 11, bar=True)
-        write(screen, "  Raw Throttle: {} - Raw Steering: {} - Dist: {}  ".format(
-            throttle_list[throttle_index], steering_list[steering_index], ultrasonic_list[0].get_distance()), 14)
+        write(screen, "  Raw Throttle: {} - Raw Steering: {}".format(
+            throttle_list[throttle_index], steering_list[steering_index]), 14)
+        write(screen, "  {} || {} || {}  ".format("%0.2f" % left_dist, "%0.2f" % front_dist, "%0.2f" % right_dist), 15)
+        write(screen, "Loop Number: " + str(loopNum), "first", align='right')
 
         char = screen.getch()
+
+        loopNum += 1
+
     end(screen)
 
 
