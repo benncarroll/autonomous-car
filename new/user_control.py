@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+#
+# Copyright 2017, Ben Carroll, All rights reserved.
+#
+# Repo:     www.github.com/benncarroll/autonomous-car
+# Website:  www.benncarroll.tech
+#
+
 import RPi.GPIO as GPIO
 import time
 import curses
